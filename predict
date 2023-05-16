@@ -1,0 +1,93 @@
+import json
+import numpy as np
+from tensorflow.keras.models import load_model
+import tensorflow as tf
+import random
+import re
+
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+    try:
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+    except RuntimeError as e:
+        print(e)
+
+MAX_AA_LEN = 600
+MAX_SMILES_LEN = 400
+
+AA_REGEX = re.compile(r'^[A-Z]+$')
+SMILES_REGEX = re.compile(r'^[A-Za-z0-9@+\\\/\-\[\]\(\)\.#=]+$', re.IGNORECASE)
+
+def process_line(line, chemical_dict, protein_dict):
+    parts = line.strip().split(',')
+    if parts[2] == '1':
+        if parts[0] in chemical_dict:
+            return chemical_dict[parts[0]], protein_dict[parts[1]]
+    elif parts[2] == '2':
+        if parts[0] in protein_dict:
+            return protein_dict[parts[0]], chemical_dict[parts[1]]
+    return None
+
+def process_file(input_file, output_file, chemical_dict, protein_dict, code_dict, model, batch_size=32):
+    with open(input_file, 'r') as c_file, open(output_file, "w") as f:
+        batch_data = []
+        for line in c_file:
+            processed_line = process_line(line, chemical_dict, protein_dict)
+            if processed_line:
+                seq_a, seq_b = processed_line
+                if AA_REGEX.match(seq_a):
+                    if SMILES_REGEX.match(seq_b) and len(seq_a) <= MAX_AA_LEN and len(seq_b) <= MAX_SMILES_LEN:
+                        batch_data.append(seq_a + seq_b)
+                elif SMILES_REGEX.match(seq_a):
+                    if AA_REGEX.match(seq_b) and len(seq_a) <= MAX_SMILES_LEN and len(seq_b) <= MAX_AA_LEN:
+                        batch_data.append(seq_a + seq_b)
+            if len(batch_data) >= batch_size:
+                predictions = predict_batch(batch_data, code_dict, model)
+                write_predictions(predictions, batch_data, f)
+                batch_data = []
+        if len(batch_data) > 0:
+            predictions = predict_batch(batch_data, code_dict, model)
+            write_predictions(predictions, batch_data, f)
+
+def predict_batch(data, code_dict, model):
+    max_len = 1000
+    padded_data = []
+    for s in data:
+        padded_s = s.ljust(max_len, " ")
+        padded_data.append(padded_s)
+    text = padded_data
+    encoded_text = []
+    for s in text:
+        encoded_s = [code_dict[char] for char in s]
+        encoded_text.append(encoded_s)
+    encoded_text = np.array(encoded_text)
+    encoded_text = np.expand_dims(encoded_text, axis=-1)
+    return model.predict(encoded_text)
+
+def write_predictions(predictions, data, file):
+    for i, p in enumerate(predictions):
+        file.write(f"Prediction for data {i}:({data[i]}): {p.argmax()} ({p})\n")
+
+def main():
+    protein_dict = {}
+    with open('', 'r') as b_file:
+        for line in b_file:
+            parts = line.rstrip().split(',')
+            protein_dict[parts[0]] = parts[1]
+
+    chemical_dict = {}
+    with open('', 'r') as b_file:
+        for line in b_file:
+            key = line.rstrip().split(',')[0]
+            value = line.rstrip().split(',')[1]
+            chemical_dict[key] = value
+
+    with open('', 'r') as f:
+        code_dict = json.load(f)
+
+    model = load_model('.h5')
+    process_file('', '', chemical_dict, protein_dict, code_dict, model)
+
+if __name__ == '__main__':
+    main()
