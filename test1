@@ -1,0 +1,183 @@
+
+import datetime
+import logging
+import time
+from keras.layers import Reshape
+from keras.utils.np_utils import to_categorical
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Input, Conv1D, GlobalMaxPooling1D, Dense
+import numpy as np
+import os
+import argparse
+from collections import Counter
+from tensorflow.keras.callbacks import ModelCheckpoint
+import tensorflow as tf
+import json
+import re
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+    try:
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+    except RuntimeError as e:
+        print(e)
+
+protein_dict = {}
+with open('', 'r') as b_file:
+    for line in b_file:
+        parts = line.rstrip().split(',')
+        protein_dict[parts[0]] = parts[1]
+
+chemical_dict = {}
+with open('', 'r') as b_file:
+    for line in b_file:
+        key = line.rstrip().split(',')[0]
+        value = line.rstrip().split(',')[1]
+        chemical_dict[key] = value
+
+pos_data = []
+with open('', 'r') as c_file:
+    for line in c_file:
+        parts = line.strip().split(',')
+        if parts[3] == '1':
+            if parts[0] in chemical_dict:
+                pos_data.append(chemical_dict[parts[0]] + ',' + protein_dict[parts[1]])
+        elif parts[3] == '2':
+            if parts[0] in protein_dict:
+                pos_data.append(protein_dict[parts[0]] + ',' + chemical_dict[parts[1]])
+        elif parts[3] == '3':
+            if parts[0] in chemical_dict and parts[1] in chemical_dict:
+                pos_data.append(chemical_dict[parts[0]] + ',' + chemical_dict[parts[1]])
+
+neg_data = []
+with open('', 'r') as c_file:
+    for line in c_file:
+        parts = line.strip().split(',')
+        if parts[2] == '1':
+            if parts[0] in chemical_dict:
+                neg_data.append(chemical_dict[parts[0]] + ',' + protein_dict[parts[1]])
+        elif parts[2] == '2':
+            if parts[0] in protein_dict:
+                neg_data.append(protein_dict[parts[0]] + ',' + chemical_dict[parts[1]])
+        elif parts[2] == '3':
+            if parts[0] in chemical_dict and parts[1] in chemical_dict:
+                neg_data.append(chemical_dict[parts[0]] + ',' + chemical_dict[parts[1]])
+
+from tensorflow.keras.models import load_model
+
+MAX_AA_LEN = 600
+MAX_SMILES_LEN = 400
+AA_REGEX = re.compile(r'^[A-Z]+$')
+SMILES_REGEX = re.compile(r'^[A-Za-z0-9@+\\\/\-\[\]\(\)\.#=]+$', re.IGNORECASE)
+
+new_pos_data = []
+new_neg_data = []
+
+for data in pos_data:
+    seq_a, seq_b = data.strip().split(',')
+    if AA_REGEX.match(seq_a):
+        if SMILES_REGEX.match(seq_b) and len(seq_a) <= MAX_AA_LEN and len(seq_b) <= MAX_SMILES_LEN:
+            new_pos_data.append(seq_a + seq_b)
+    elif SMILES_REGEX.match(seq_a):
+        if AA_REGEX.match(seq_b) and len(seq_a) <= MAX_SMILES_LEN and len(seq_b) <= MAX_AA_LEN:
+            new_pos_data.append(seq_a + seq_b)
+
+for data in neg_data:
+    seq_a, seq_b = data.strip().split(',')
+    if AA_REGEX.match(seq_a):
+        if SMILES_REGEX.match(seq_b) and len(seq_a) <= MAX_AA_LEN and len(seq_b) <= MAX_SMILES_LEN:
+            new_neg_data.append(seq_a + seq_b)
+    elif SMILES_REGEX.match(seq_a):
+        if AA_REGEX.match(seq_b) and len(seq_a) <= MAX_SMILES_LEN and len(seq_b) <= MAX_AA_LEN:
+            new_neg_data.append(seq_a + seq_b)
+
+
+print('new_pos_data num:{}'.format(len(new_pos_data)))  
+print('new_neg_data num:{}'.format(len(new_neg_data)))   
+
+max_len = 1000
+padded_pos_data = []  
+for s in new_pos_data:
+    padded_s = s.ljust(max_len, " ")  
+    padded_pos_data.append(padded_s)
+
+padded_neg_data = []  
+for s in new_neg_data:
+    padded_s = s.ljust(max_len, " ")  
+    padded_neg_data.append(padded_s)
+
+pos_text = padded_pos_data  
+neg_text = padded_neg_data
+
+with open('json', 'r') as f:
+    code_dict = json.load(f)
+
+encoded_pos_text = []
+encoded_neg_text = []
+for s in pos_text:
+    encoded_s = [code_dict[char] for char in s]
+    encoded_pos_text.append(encoded_s)
+for s in neg_text:
+    encoded_s = [code_dict[char] for char in s]
+    encoded_neg_text.append(encoded_s)
+
+from sklearn.model_selection import train_test_split
+
+X = encoded_pos_text + encoded_neg_text
+y = [1] * len(encoded_pos_text) + [0] * len(encoded_neg_text)
+
+X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+X_train, X_val, y_train, y_val = train_test_split(X_train_val, y_train_val, test_size=0.25, random_state=42)
+
+train_set = (X_train, y_train)
+val_set = (X_val, y_val)
+test_set = (X_test, y_test)
+
+
+model = load_model('.h5')
+
+x_test = np.array(X_test)
+x_test = np.expand_dims(x_test, axis=-1)
+
+labels2 = np.array(y_test)
+labels2 = to_categorical(labels2)
+
+np.random.seed(28)
+indices = np.arange(x_test.shape[0])
+np.random.shuffle(indices)
+x_test = x_test[indices]
+labels2 = labels2[indices]
+y_test = labels2
+
+from sklearn.metrics import roc_auc_score, roc_curve, precision_recall_curve, f1_score, recall_score, auc
+import matplotlib.pyplot as plt
+y_pred = model.predict(x_test)
+y_test = np.argmax(y_test, axis=1)
+
+AUC = roc_auc_score(y_test, y_pred[:, 1])
+fpr, tpr, _ = roc_curve(y_test, y_pred[:, 1])
+print(AUC)
+
+roc_auc = auc(fpr, tpr)
+plt.figure()
+lw = 2
+plt.plot(fpr, tpr, color='darkorange',
+         lw=lw, label='ROC curve (area = %0.2f)' % roc_auc)
+plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('ROC Curve')
+plt.legend(loc="lower right")
+plt.show()
+
+from sklearn.metrics import auc
+precision, recall, _ = precision_recall_curve(y_test, y_pred[:, 1])
+AUPRC = auc(recall, precision)
+print(AUPRC)
+
+f_measure = f1_score(y_test, y_pred.argmax(axis=1))
+sensitivity = recall_score(y_test, y_pred.argmax(axis=1))
+print(f_measure)
+print(sensitivity)
