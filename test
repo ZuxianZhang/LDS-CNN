@@ -1,0 +1,57 @@
+x_test = np.array(X_test)
+x_test = np.expand_dims(x_test, axis=-1)
+
+labels2 = np.array(y_test)
+labels2 = to_categorical(labels2)
+
+np.random.seed(28)
+indices = np.arange(x_test.shape[0])
+np.random.shuffle(indices)
+x_test = x_test[indices]
+labels2 = labels2[indices]
+y_test = labels2
+
+loss, acc = model.evaluate(x_test, y_test)
+
+logging.info("test_loss:{}".format(loss))
+logging.info("test_acc:{}".format(acc))
+print('test_loss:', loss)
+print('test_acc:', acc)
+
+predictions = model.predict(x_test, batch_size=128, verbose=1)
+logging.info("prediction:{}".format(predictions))
+
+with open('', 'w') as f:
+    for pred in predictions:
+        f.write(str(pred)+'\n')
+
+y_pred = model.predict(x_test)
+y_test = np.argmax(y_test, axis=1)
+
+AUC = roc_auc_score(y_test, y_pred[:, 1])
+fpr, tpr, _ = roc_curve(y_test, y_pred[:, 1])
+print(AUC)
+
+roc_auc = auc(fpr, tpr)
+plt.figure()
+lw = 2
+plt.plot(fpr, tpr, color='darkorange',
+         lw=lw, label='ROC curve (area = %0.2f)' % roc_auc)
+plt.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('ROC Curve')
+plt.legend(loc="lower right")
+plt.show()
+
+from sklearn.metrics import auc
+precision, recall, _ = precision_recall_curve(y_test, y_pred[:, 1])
+AUPRC = auc(recall, precision)
+print(AUPRC)
+
+f_measure = f1_score(y_test, y_pred.argmax(axis=1))
+sensitivity = recall_score(y_test, y_pred.argmax(axis=1))
+print(f_measure)
+print(sensitivity)
