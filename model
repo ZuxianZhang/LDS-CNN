@@ -1,0 +1,30 @@
+model = Sequential()
+model.add(Input(shape=Input_shape))
+model.add(Conv1D(filters=Conv1D_filters, kernel_size=3, padding='valid', activation='relu', strides=1))
+model.add(Conv1D(filters=Conv1D_filters, kernel_size=3, padding='valid', activation='relu', strides=1))
+model.add(GlobalMaxPooling1D())
+model.add(Reshape((Conv1D_filters, 1)))
+model.add(Conv1D(filters=Conv1D_filters2, kernel_size=3, padding='valid', activation='relu', strides=1))
+model.add(Conv1D(filters=Conv1D_filters2, kernel_size=3, padding='valid', activation='relu', strides=1))
+model.add(GlobalMaxPooling1D())
+model.add(Dense(256, activation='relu'))
+model.add(Dense(2, activation='sigmoid'))
+
+model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+model.summary()
+
+checkpoint_callback = ModelCheckpoint(filepath=checkpoint_path, monitor='val_accuracy', verbose=0, save_best_only=True, mode='max')
+
+history = model.fit(x_train, y_train, epochs=epochs, batch_size=batch_size, validation_data=(x_val, y_val), callbacks=[checkpoint_callback])
+
+best_val_acc = history.history['val_accuracy'][0]
+
+for i in range(epochs):
+    logging.info("Epoch_%d  Train_loss:%f Train_acc:%f Val_loss:%f Val_acc:%f", i + 1, history.history['loss'][i],
+                 history.history['accuracy'][i], history.history['val_loss'][i], history.history['val_accuracy'][i])
+
+    if history.history['val_accuracy'][i] > best_val_acc:
+        best_val_acc = history.history['val_accuracy'][i]
+        best_epoch = i + 1
+        best_weights_filename = checkpoint_path.format(epoch=best_epoch, val_loss=history.history['val_loss'][i],
+                                                       val_accuracy=best_val_acc)
