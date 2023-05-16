@@ -1,2 +1,2 @@
-# LSDTSCNNHere, we propose a general method for predicting small-molecule drug-protein target interactions, LSDTSCNN, which extracts features from the network constructed by drug-target interactions and predicts potential drug-target interactions by unifying the encoding of small-molecule drugs and protein targets.
+Here, we propose a general method for predicting small-molecule drug-protein target interactions, LSDTSCNN, which extracts features from the network constructed by drug-target interactions and predicts potential drug-target interactions by unifying the encoding of small-molecule drugs and protein targets.
 We also provide three protein correspondence interaction files for the external validation set (containing positive and negative samples )
