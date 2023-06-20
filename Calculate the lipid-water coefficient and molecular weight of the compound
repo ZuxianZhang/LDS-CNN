@@ -1,0 +1,39 @@
+import pandas as pd
+from rdkit import Chem
+from rdkit.Chem import Descriptors
+
+# 读取txt文件
+data = pd.read_csv('.txt', header=None)
+
+# 创建空列表来存储分子量和AlogP
+molecular_weights = []
+alogp_values = []
+
+# 遍历每一行化合物
+for compound in data[1]:
+    # 创建分子对象
+    mol = Chem.MolFromSmiles(compound)
+    if mol is not None:
+        # 计算分子量
+        mw = Descriptors.MolWt(mol)
+        molecular_weights.append(mw)
+
+        # 计算AlogP
+        alogp = Descriptors.MolLogP(mol)
+        alogp_values.append(alogp)
+    else:
+        # 如果无法解析化合物结构，则将分子量和AlogP设置为NaN
+        molecular_weights.append(float('NaN'))
+        alogp_values.append(float('NaN'))
+
+# 计算最大最小值
+max_mw = max(molecular_weights)
+min_mw = min(molecular_weights)
+max_alogp = max(alogp_values)
+min_alogp = min(alogp_values)
+
+# 打印结果
+print("最大分子量（MW）:", max_mw)
+print("最小分子量（MW）:", min_mw)
+print("最大脂水分配系数（AlogP）:", max_alogp)
+print("最小脂水分配系数（AlogP）:", min_alogp)
