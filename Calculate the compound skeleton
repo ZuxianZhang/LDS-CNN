@@ -1,0 +1,73 @@
+
+with open("", "r") as f1:
+    lines_file1 = f1.readlines()
+
+sequences = set()
+
+protein = ''
+
+for line in lines_file1:
+    part = line.split(protein)  # 假设序列在每行中的第二个位置
+    if part[0] != '':
+        sequences.add(part[0])
+    elif part[1] != '':
+        sequences.add(part[1])
+
+
+total_sequences = len(sequences)
+print("除了序列A以外的其他序列总数：", total_sequences)
+
+def find_lines_with_compounds(compound_list, file_path):
+    line_numbers = []
+    with open(file_path, 'r') as file:
+        for line_number, line in enumerate(file, 1):  # 枚举文件的行号，从1开始计数
+            for compound in compound_list:
+                if compound in line:
+                    line_numbers.append(line_number)
+                    break  # 找到匹配的化合物后，停止查找该行的其他化合物
+
+    return line_numbers
+
+def extract_lines_from_file(file_path, line_numbers):
+    lines = []
+    with open(file_path, 'r') as file:
+        for line_number, line in enumerate(file, 1):
+            if line_number in line_numbers:
+                lines.append(line.strip())
+
+    return lines
+
+# 示例化合物列表和文件路径
+compounds = sequences
+file_A_path = '.txt'
+file_B_path = '.txt'
+
+# 在文件A中查找含有化合物的行数
+matching_line_numbers = find_lines_with_compounds(compounds, file_A_path)
+print("Matching line numbers in file A:", matching_line_numbers)
+
+expanded_sequence = []
+# 根据行数从文件B中提取对应的行
+matching_lines = extract_lines_from_file(file_B_path, matching_line_numbers)
+print("Matching lines from file B:")
+for line in matching_lines:
+    expanded_sequence.append(line)
+
+
+
+from rdkit import Chem
+
+def count_bemis_murcko_scaffolds(compound_list):
+    scaffold_set = set()
+    for compound in compound_list:
+        mol = Chem.MolFromSmiles(compound)  # 将SMILES字符串转化为RDKit的分子对象
+        scaffold = Chem.MurckoDecompose(mol)  # 计算Bemis-Murcko骨架
+        scaffold_smiles = Chem.MolToSmiles(scaffold)  # 将骨架转化为SMILES字符串
+        scaffold_set.add(scaffold_smiles)  # 将骨架添加到集合中
+
+    return len(scaffold_set)  # 返回骨架数目
+
+# 示例化合物列表
+
+num_scaffolds = count_bemis_murcko_scaffolds(expanded_sequence)
+print("Number of Bemis-Murcko scaffolds:", num_scaffolds)
